@@ -237,7 +237,7 @@ export default function App() {
           </div>
         </div>
       </div>
-      <Canvas shadows camera={{ position-y: 2.6, position-z: 6.8, fov: 46 }}>
+      <Canvas shadows camera={{ fov: 46 }}>
         <ambientLight intensity={0.85} />
         <directionalLight position-x={5} position-y={8} position-z={5} intensity={1.4} castShadow />
         <Environment preset="park" />
