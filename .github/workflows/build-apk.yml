@@ -1,10 +1,7 @@
 name: Build Android APK
-
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,19 +14,19 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Generate Android Icons & Build Web
-        run: |
+      - run: |
+          mkdir -p public/models
+          curl -fL "https://githubusercontent.com" -o public/models/robot.glb
+          curl -fL "https://githubusercontent.com" -o public/models/duck.glb
+          curl -fL "https://githubusercontent.com" -o public/models/avocado.glb
+          curl -fL "https://githubusercontent.com" -o public/models/car.glb
+          curl -fL "https://githubusercontent.com" -o public/models/fox.glb
           npm install --legacy-peer-deps
           npx @capacitor/assets generate --android
           npm run build
           npx cap sync android
-      - name: Build Debug APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+          cd android && chmod +x gradlew && ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
         with:
           name: English-Tutor-3D-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk

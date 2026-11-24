@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Environment, ContactShadows, Float, Sparkles, Text } from '@react-three/drei';
+import { OrbitControls, Environment, ContactShadows, Float, Sparkles, Text, useGLTF, useAnimations } from '@react-three/drei';
 
 const playSFX = (type) => {
   try {
@@ -11,218 +11,144 @@ const playSFX = (type) => {
     const ctx = new AudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+    osc.connect(gain); gain.connect(ctx.destination);
     const now = ctx.currentTime;
-    if (type === 'success') {
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(523.25, now);
-      osc.frequency.setValueAtTime(659.25, now + 0.1);
-      osc.frequency.setValueAtTime(783.99, now + 0.2);
-      osc.frequency.setValueAtTime(1046.5, now + 0.3);
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-      osc.start(now);
-      osc.stop(now + 0.6);
-    } else if (type === 'error') {
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(200, now);
-      osc.frequency.linearRampToValueAtTime(140, now + 0.25);
-      gain.gain.setValueAtTime(0.2, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-      osc.start(now);
-      osc.stop(now + 0.3);
-    } else {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, now);
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-      osc.start(now);
-      osc.stop(now + 0.1);
-    }
+    osc.type = type === 'success' ? 'triangle' : type === 'error' ? 'sawtooth' : 'sine';
+    osc.frequency.setValueAtTime(type === 'success' ? 659.25 : type === 'error' ? 180 : 480, now);
+    if (type === 'success') osc.frequency.setValueAtTime(1046.5, now + 0.15);
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+    osc.start(now); osc.stop(now + 0.35);
   } catch (e) {}
 };
 
+const NUMS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five' };
 const LESSONS = {
-  fruits: {
-    title: '🍎 Fruits',
+  animals: {
+    title: '🦊 Animals', mode: 'find',
     items: [
-      { word: 'apple', color: '#ff3b30', shape: 'sphere', pos: [-2.2, 0.7, 0] },
-      { word: 'banana', color: '#ffcc00', shape: 'capsule', pos: [0, 0.7, 1.2] },
-      { word: 'blueberry', color: '#007aff', shape: 'dodecahedron', pos: [2.2, 0.7, 0] },
+      { word: 'fox', url: '/models/fox.glb', scale: 0.018, rotY: 0.5, y: -0.4, pos: [-2.1, 0.7, 0] },
+      { word: 'duck', url: '/models/duck.glb', scale: 0.65, rotY: -0.4, y: -0.45, pos: [0, 0.7, 1.2] },
+      { word: 'car', url: '/models/car.glb', scale: 18, rotY: 0.6, y: -0.35, pos: [2.1, 0.7, 0] },
     ],
   },
-  colors: {
-    title: '🎨 Colors',
+  food: {
+    title: '🥑 Objects', mode: 'find',
     items: [
-      { word: 'red', color: '#ff2d55', shape: 'box', pos: [-2.2, 0.7, 0] },
-      { word: 'green', color: '#34c759', shape: 'box', pos: [0, 0.7, 1.2] },
-      { word: 'purple', color: '#af52de', shape: 'box', pos: [2.2, 0.7, 0] },
+      { word: 'avocado', url: '/models/avocado.glb', scale: 14, rotY: 0, y: -0.4, pos: [-2.1, 0.7, 0] },
+      { word: 'duck', url: '/models/duck.glb', scale: 0.65, rotY: -0.4, y: -0.45, pos: [0, 0.7, 1.2] },
+      { word: 'fox', url: '/models/fox.glb', scale: 0.018, rotY: -0.5, y: -0.4, pos: [2.1, 0.7, 0] },
     ],
   },
+  counting: { title: '🔢 Count 1-5', mode: 'count', items: [] },
 };
 
-const useTutorStore = create(
-  persist(
-    (set, get) => ({
-      stars: 0,
-      currentCategory: 'fruits',
-      targetWord: null,
-      tutorMessage: 'Hi! Press Start Lesson to play!',
-      isSpeaking: false,
-      isListening: false,
-      celebrate: false,
-      setCategory: (cat) => {
-        playSFX('click');
-        set({ currentCategory: cat, targetWord: null, tutorMessage: `Topic: ${LESSONS[cat].title}. Press Start!` });
-      },
-      setSpeaking: (val) => set({ isSpeaking: val }),
-      setListening: (val) => set({ isListening: val }),
-      setTutorMessage: (msg) => set({ tutorMessage: msg }),
-      triggerSuccess: (customReply) => {
-        playSFX('success');
-        set((state) => ({ stars: state.stars + 1, celebrate: true, tutorMessage: customReply }));
-        setTimeout(() => set({ celebrate: false }), 2200);
-      },
-      startNewRound: () => {
-        const { currentCategory } = get();
-        const items = LESSONS[currentCategory].items;
-        const randomItem = items[Math.floor(Math.random() * items.length)];
-        const prompt = `Find the ${randomItem.word}! Click it or say "${randomItem.word}"!`;
-        set({ targetWord: randomItem.word, tutorMessage: prompt });
-        return prompt;
-      },
-    }),
-    { name: 'kids-english-tutor-storage', partialize: (state) => ({ stars: state.stars }) }
-  )
-);
+const useTutorStore = create(persist((set, get) => ({
+  stars: 0, cat: 'animals', target: null, count: 0,
+  cModel: { word: 'duck', url: '/models/duck.glb', scale: 0.48, rotY: -0.4, y: -0.35 },
+  msg: 'Hi! Tap Start to play!', speaking: false, listening: false, celebrate: false, anim: 'Idle',
+  setCat: (cat) => { playSFX('click'); set({ cat, target: null, count: 0, anim: 'Wave', msg: `Topic: ${LESSONS[cat].title}. Tap Start!` }); },
+  setSpeaking: (v) => set({ speaking: v }), setListening: (v) => set({ listening: v }), setMsg: (msg) => set({ msg }),
+  win: (msg) => {
+    playSFX('success');
+    set((s) => ({ stars: s.stars + 1, celebrate: true, anim: 'Dance', msg }));
+    setTimeout(() => set({ celebrate: false, anim: 'Idle' }), 2200);
+  },
+  next: () => {
+    const l = LESSONS[get().cat];
+    if (l.mode === 'count') {
+      const c = Math.floor(Math.random() * 5) + 1;
+      const opts = [
+        { word: 'duck', url: '/models/duck.glb', scale: 0.45, rotY: -0.4, y: -0.35 },
+        { word: 'avocado', url: '/models/avocado.glb', scale: 10, rotY: 0, y: -0.3 },
+        { word: 'car', url: '/models/car.glb', scale: 12, rotY: 0.5, y: -0.25 },
+      ];
+      const m = opts[Math.floor(Math.random() * opts.length)];
+      const w = NUMS[c];
+      const p = `How many ${m.word}s? Tap a number or say "${w}"!`;
+      set({ target: w, count: c, cModel: m, anim: 'Wave', msg: p });
+      return p;
+    }
+    const it = l.items[Math.floor(Math.random() * l.items.length)];
+    const p = `Find the ${it.word}! Tap it or say "${it.word}"!`;
+    set({ target: it.word, count: 0, anim: 'Wave', msg: p });
+    return p;
+  },
+}), { name: 'tutor-glb-v1', partialize: (s) => ({ stars: s.stars }) }));
 
-const speak = (text, onEnd) => {
-  if (!window.speechSynthesis) { if (onEnd) onEnd(); return; }
+const speak = (text, cb) => {
+  if (!window.speechSynthesis) { if (cb) cb(); return; }
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'en-US';
-  utterance.rate = 0.9;
-  utterance.pitch = 1.25;
-  utterance.onstart = () => useTutorStore.getState().setSpeaking(true);
-  utterance.onend = () => { useTutorStore.getState().setSpeaking(false); if (onEnd) onEnd(); };
-  utterance.onerror = () => { useTutorStore.getState().setSpeaking(false); if (onEnd) onEnd(); };
-  window.speechSynthesis.speak(utterance);
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'en-US'; u.rate = 0.9; u.pitch = 1.25;
+  u.onstart = () => useTutorStore.getState().setSpeaking(true);
+  u.onend = () => { useTutorStore.getState().setSpeaking(false); if (cb) cb(); };
+  u.onerror = () => { useTutorStore.getState().setSpeaking(false); if (cb) cb(); };
+  window.speechSynthesis.speak(u);
 };
 
-const handleVoiceEvaluation = (spokenText) => {
-  const { targetWord, triggerSuccess, startNewRound, setTutorMessage } = useTutorStore.getState();
-  if (!targetWord) {
-    const msg = 'Press the green Start button first!';
-    setTutorMessage(msg);
-    speak(msg);
-    return;
-  }
-  if (spokenText.toLowerCase().includes(targetWord)) {
-    const msg = `Awesome! You said ${targetWord}! You earned a star!`;
-    triggerSuccess(msg);
-    speak(msg, () => speak(startNewRound()));
-  } else {
-    playSFX('error');
-    const msg = `I heard "${spokenText}". Try saying ${targetWord}!`;
-    setTutorMessage(msg);
-    speak(msg);
-  }
-};
-
-function TutorRobot() {
-  const headRef = useRef();
-  const mouthRef = useRef();
-  const bodyRef = useRef();
-  const isSpeaking = useTutorStore((s) => s.isSpeaking);
-  const celebrate = useTutorStore((s) => s.celebrate);
-
-  useFrame((state) => {
-    const t = state.clock.getElapsedTime();
-    if (headRef.current) {
-      headRef.current.position.y = 1.85 + Math.sin(t * 2.5) * 0.06;
-      headRef.current.rotation.z = isSpeaking ? Math.sin(t * 8) * 0.08 : 0;
-    }
-    if (mouthRef.current) {
-      mouthRef.current.scale.y = isSpeaking ? 0.3 + Math.abs(Math.sin(t * 18)) * 1.4 : 0.2;
-    }
-    if (bodyRef.current) {
-      bodyRef.current.position.y = celebrate ? Math.abs(Math.sin(t * 10)) * 0.4 : 0;
-    }
-  });
-
-  return (
-    <group ref={bodyRef} position={[0, 0, -1.8]}>
-      <mesh position={[0, 0.75, 0]} castShadow>
-        <cylinderGeometry args={[0.45, 0.65, 1.2, 32]} />
-        <meshStandardMaterial color="#3B82F6" roughness={0.3} />
-      </mesh>
-      <group ref={headRef} position={[0, 1.85, 0]}>
-        <mesh castShadow>
-          <sphereGeometry args={[0.62, 32, 32]} />
-          <meshStandardMaterial color="#FBBF24" roughness={0.3} />
-        </mesh>
-        <mesh position={[-0.22, 0.14, 0.54]}>
-          <sphereGeometry args={[0.09, 16, 16]} />
-          <meshStandardMaterial color="#0F172A" />
-        </mesh>
-        <mesh position={[0.22, 0.14, 0.54]}>
-          <sphereGeometry args={[0.09, 16, 16]} />
-          <meshStandardMaterial color="#0F172A" />
-        </mesh>
-        <mesh ref={mouthRef} position={[0, -0.16, 0.56]}>
-          <boxGeometry args={[0.28, 0.14, 0.08]} />
-          <meshStandardMaterial color="#F43F5E" />
-        </mesh>
-      </group>
-    </group>
-  );
+class SafeModel extends React.Component {
+  state = { err: false };
+  static getDerivedStateFromError() { return { err: true }; }
+  render() { return this.state.err ? this.props.fb : this.props.children; }
 }
 
-function InteractiveItems() {
-  const { currentCategory, targetWord, celebrate, triggerSuccess, startNewRound, setTutorMessage } = useTutorStore();
-  const items = LESSONS[currentCategory].items;
+function GLB({ url, scale, rotY, y, onClick }) {
+  const { scene } = useGLTF(url);
+  const clone = React.useMemo(() => scene.clone(), [scene]);
+  return <primitive object={clone} scale={scale} rotation={[0, rotY, 0]} position={[0, y, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }} />;
+}
 
-  const handleClick = (word) => {
-    if (!targetWord) {
-      playSFX('click');
-      speak(`That is ${word}! Press Start Lesson to play.`);
-      return;
-    }
-    if (word === targetWord) {
-      const msg = `Great job! That is ${word}!`;
-      triggerSuccess(msg);
-      speak(msg, () => speak(startNewRound()));
-    } else {
-      playSFX('error');
-      const msg = `Oops, that's ${word}. Find ${targetWord}!`;
-      setTutorMessage(msg);
-      speak(msg);
-    }
+function Robot() {
+  const g = useRef();
+  const { scene, animations } = useGLTF('/models/robot.glb');
+  const { actions } = useAnimations(animations, g);
+  const anim = useTutorStore((s) => s.anim);
+  const speaking = useTutorStore((s) => s.speaking);
+  useEffect(() => {
+    const a = actions[anim] || actions['Idle'];
+    if (a) { a.reset().fadeIn(0.25).play(); return () => a.fadeOut(0.25); }
+  }, [anim, actions]);
+  useFrame((st) => { if (g.current && speaking) g.current.rotation.y = Math.sin(st.clock.getElapsedTime() * 7) * 0.1; });
+  return <group ref={g} position={[0, -0.2, -2.1]} scale={0.58}><primitive object={scene} /></group>;
+}
+
+function SceneItems() {
+  const { cat, target, count, cModel, celebrate, win, next, setMsg } = useTutorStore();
+  const l = LESSONS[cat];
+  const pick = (w) => {
+    if (!target) { playSFX('click'); speak(`That is a ${w}! Tap Start!`); return; }
+    if (w === target) { const m = `Great job! That is the ${w}!`; win(m); speak(m, () => speak(next())); }
+    else { playSFX('error'); const m = `Oops, that's ${w}. Find ${target}!`; setMsg(m); speak(m); }
   };
-
-  const renderGeometry = (shape) => {
-    switch (shape) {
-      case 'box': return <boxGeometry args={[0.85, 0.85, 0.85]} />;
-      case 'capsule': return <capsuleGeometry args={[0.35, 0.6, 8, 16]} />;
-      case 'dodecahedron': return <dodecahedronGeometry args={[0.55, 0]} />;
-      default: return <sphereGeometry args={[0.52, 32, 32]} />;
-    }
-  };
-
+  if (l.mode === 'count') {
+    const n = count > 0 ? count : 3;
+    const pts = Array.from({ length: n }, (_, i) => [(i - (n - 1) / 2) * 1.35, 0.85, 0.8]);
+    return (
+      <group>
+        {celebrate && <Sparkles count={80} scale={6} size={6} speed={0.8} color="#FACC15" />}
+        {pts.map((p, i) => (
+          <Float key={i} speed={2} floatIntensity={0.25}>
+            <group position={p}>
+              <SafeModel fb={<mesh><sphereGeometry args={[0.35]} /><meshStandardMaterial color="#FACC15" /></mesh>}>
+                <Suspense fallback={null}><GLB url={cModel.url} scale={cModel.scale} rotY={cModel.rotY} y={cModel.y} onClick={() => { playSFX('click'); speak(NUMS[i + 1]); }} /></Suspense>
+              </SafeModel>
+            </group>
+          </Float>
+        ))}
+      </group>
+    );
+  }
   return (
     <group>
-      {celebrate && <Sparkles count={90} scale={6} size={6} speed={0.8} color="#FACC15" />}
-      {items.map((item) => (
-        <Float key={item.word} speed={2.5} floatIntensity={0.4}>
-          <group position={item.pos}>
-            <mesh castShadow onClick={() => handleClick(item.word)}>
-              {renderGeometry(item.shape)}
-              <meshStandardMaterial color={item.color} roughness={0.25} />
-            </mesh>
-            <Text position={[0, -0.85, 0]} fontSize={0.28} color="#1E293B">
-              {item.word.toUpperCase()}
-            </Text>
+      {celebrate && <Sparkles count={80} scale={6} size={6} speed={0.8} color="#FACC15" />}
+      {l.items.map((it) => (
+        <Float key={it.word} speed={2} floatIntensity={0.25}>
+          <group position={it.pos}>
+            <SafeModel fb={<mesh onClick={() => pick(it.word)}><boxGeometry args={[0.7, 0.7, 0.7]} /><meshStandardMaterial color="#F97316" /></mesh>}>
+              <Suspense fallback={null}><GLB url={it.url} scale={it.scale} rotY={it.rotY} y={it.y} onClick={() => pick(it.word)} /></Suspense>
+            </SafeModel>
+            <Text position={[0, -0.95, 0]} fontSize={0.28} color="#1E293B">{it.word.toUpperCase()}</Text>
           </group>
         </Float>
       ))}
@@ -231,72 +157,58 @@ function InteractiveItems() {
 }
 
 export default function App() {
-  const { stars, tutorMessage, isListening, currentCategory, setCategory, setListening, startNewRound } = useTutorStore();
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const { stars, msg, listening, cat, target, count, setCat, setListening, next, win, setMsg } = useTutorStore();
+  const [micOk, setMicOk] = useState(true);
+  useEffect(() => { if (!window.SpeechRecognition && !window.webkitSpeechRecognition) setMicOk(false); }, []);
 
-  useEffect(() => {
-    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
-      setSpeechSupported(false);
-    }
-  }, []);
-
-  const handleStart = () => {
+  const onMic = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
     playSFX('click');
-    const prompt = startNewRound();
-    speak(prompt);
-  };
-
-  const handleMic = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    playSFX('click');
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.onstart = () => setListening(true);
-    recognition.onend = () => setListening(false);
-    recognition.onresult = (e) => handleVoiceEvaluation(e.results.transcript);
-    recognition.start();
+    const r = new SR(); r.lang = 'en-US';
+    r.onstart = () => setListening(true); r.onend = () => setListening(false);
+    r.onresult = (e) => {
+      const txt = e.results.transcript.toLowerCase();
+      if (!target) { speak('Press Start first!'); return; }
+      if (txt.includes(target) || (count > 0 && txt.includes(String(count)))) {
+        const m = `Awesome! ${target.toUpperCase()} is right!`; win(m); speak(m, () => speak(next()));
+      } else { playSFX('error'); const m = `I heard "${txt}". Say ${target}!`; setMsg(m); speak(m); }
+    };
+    r.start();
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: 'linear-gradient(180deg, #BAE6FD 0%, #F0F9FF 100%)', position: 'relative', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '16px', zIndex: 10 }}>
+    <div style={{ width: '100vw', height: '100vh', background: 'linear-gradient(180deg, #7DD3FC 0%, #E0F2FE 100%)', position: 'relative', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '14px', zIndex: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
           <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
-            {Object.entries(LESSONS).map(([key, val]) => (
-              <button key={key} onClick={() => setCategory(key)} style={{ padding: '8px 14px', borderRadius: '18px', border: 'none', fontSize: '14px', fontWeight: '700', background: currentCategory === key ? '#F97316' : '#FFFFFF', color: currentCategory === key ? '#FFFFFF' : '#334155' }}>
-                {val.title}
-              </button>
+            {Object.entries(LESSONS).map(([k, v]) => (
+              <button key={k} onClick={() => setCat(k)} style={{ padding: '8px 12px', borderRadius: '16px', border: 'none', fontSize: '13px', fontWeight: '700', background: cat === k ? '#F97316' : '#FFF', color: cat === k ? '#FFF' : '#334155' }}>{v.title}</button>
             ))}
           </div>
-          <div style={{ background: '#FACC15', padding: '8px 18px', borderRadius: '20px', fontSize: '18px', fontWeight: '800', color: '#713F12' }}>
-            ⭐ {stars}
+          <div style={{ background: '#FACC15', padding: '7px 16px', borderRadius: '18px', fontSize: '17px', fontWeight: '800', color: '#713F12' }}>⭐ {stars}</div>
+        </div>
+        <div style={{ alignSelf: 'center', background: 'rgba(255,255,255,0.95)', padding: '12px 20px', borderRadius: '24px', fontSize: '17px', fontWeight: '700', color: '#1E293B', textAlign: 'center', maxWidth: '92%' }}>🤖 {msg}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'auto' }}>
+          {cat === 'counting' && (
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {.map((n) => (
+                <button key={n} onClick={() => { if (n === count) { const m = `Yes! ${NUMS[n]}!`; win(m); speak(m, () => speak(next())); } else { playSFX('error'); speak('Try again!'); } }} style={{ width: '48px', height: '48px', borderRadius: '16px', border: 'none', background: '#F59E0B', color: '#FFF', fontSize: '20px', fontWeight: '900' }}>{n}</button>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => { playSFX('click'); speak(next()); }} style={{ padding: '14px 24px', fontSize: '17px', borderRadius: '50px', border: 'none', background: '#10B981', color: '#FFF', fontWeight: '800' }}>▶️ Start / Next</button>
+            {micOk && <button onClick={onMic} style={{ padding: '14px 24px', fontSize: '17px', borderRadius: '50px', border: 'none', background: listening ? '#F43F5E' : '#0284C7', color: '#FFF', fontWeight: '800' }}>{listening ? '🎙️ Listening...' : '🎤 Speak Answer'}</button>}
           </div>
         </div>
-
-        <div style={{ alignSelf: 'center', background: 'rgba(255,255,255,0.95)', padding: '12px 22px', borderRadius: '24px', fontSize: '18px', fontWeight: '700', color: '#1E293B', textAlign: 'center', maxWidth: '90%' }}>
-          🤖 {tutorMessage}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', pointerEvents: 'auto' }}>
-          <button onClick={handleStart} style={{ padding: '14px 26px', fontSize: '17px', borderRadius: '50px', border: 'none', background: '#10B981', color: '#FFF', fontWeight: '800' }}>
-            ▶️ Start / Next
-          </button>
-          {speechSupported && (
-            <button onClick={handleMic} style={{ padding: '14px 26px', fontSize: '17px', borderRadius: '50px', border: 'none', background: isListening ? '#F43F5E' : '#0284C7', color: '#FFF', fontWeight: '800' }}>
-              {isListening ? '🎙️ Listening...' : '🎤 Speak Answer'}
-            </button>
-          )}
-        </div>
       </div>
-
-      <Canvas shadows camera={{ position: [0, 2.4, 6.5], fov: 48 }}>
-        <ambientLight intensity={0.8} />
-        <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
+      <Canvas shadows camera={{ position: [0, 2.4, 6.8], fov: 48 }}>
+        <ambientLight intensity={0.9} />
+        <directionalLight position={} intensity={1.3} castShadow />
         <Environment preset="park" />
-        <TutorRobot />
-        <InteractiveItems />
+        <SafeModel fb={null}><Suspense fallback={null}><Robot /></Suspense></SafeModel>
+        <SceneItems />
         <ContactShadows position={[0, -0.01, 0]} opacity={0.35} scale={12} blur={2.2} />
         <OrbitControls enableZoom={false} enablePan={false} minPolarAngle={Math.PI / 4} maxPolarAngle={Math.PI / 2.1} />
       </Canvas>
