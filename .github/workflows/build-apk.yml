@@ -15,13 +15,8 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
       - run: |
-          mkdir -p public/models
-          curl -fL "https://githubusercontent.com" -o public/models/robot.glb
-          curl -fL "https://githubusercontent.com" -o public/models/duck.glb
-          curl -fL "https://githubusercontent.com" -o public/models/avocado.glb
-          curl -fL "https://githubusercontent.com" -o public/models/car.glb
-          curl -fL "https://githubusercontent.com" -o public/models/fox.glb
           npm install --legacy-peer-deps
+          node make-glb.cjs
           npx @capacitor/assets generate --android
           npm run build
           npx cap sync android
