@@ -205,7 +205,7 @@ export default function App() {
       </div>
       <Canvas shadows camera={{ position: [0, 2.4, 6.8], fov: 48 }}>
         <ambientLight intensity={0.9} />
-        <directionalLight position={} intensity={1.3} castShadow />
+        <directionalLight position={[5, 8, 5]} intensity={1.3} castShadow />
         <Environment preset="park" />
         <SafeModel fb={null}><Suspense fallback={null}><Robot /></Suspense></SafeModel>
         <SceneItems />
