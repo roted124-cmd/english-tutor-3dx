@@ -17,9 +17,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Build Web & Sync Android
+      - name: Generate Android Icons & Build Web
         run: |
           npm install --legacy-peer-deps
+          npx @capacitor/assets generate --android
           npm run build
           npx cap sync android
       - name: Build Debug APK
