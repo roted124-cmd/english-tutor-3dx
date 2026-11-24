@@ -192,7 +192,7 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', pointerEvents: 'auto' }}>
           {cat === 'counting' && (
             <div style={{ display: 'flex', gap: '10px' }}>
-              {.map((n) => (
+              {Array.from({length: 5}, (_, i) => i + 1).map((n) => (
                 <button key={n} onClick={() => { if (n === count) { const m = `Yes! ${NUMS[n]}!`; win(m); speak(m, () => speak(next())); } else { playSFX('error'); speak('Try again!'); } }} style={{ width: '48px', height: '48px', borderRadius: '16px', border: 'none', background: '#F59E0B', color: '#FFF', fontSize: '20px', fontWeight: '900' }}>{n}</button>
               ))}
             </div>
