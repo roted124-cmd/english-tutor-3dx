@@ -13,7 +13,6 @@ const playSFX = (type) => {
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     const now = ctx.currentTime;
     if (type === 'success') {
       osc.type = 'triangle';
@@ -61,14 +60,6 @@ const LESSONS = {
       { word: 'purple', color: '#af52de', shape: 'box', pos: [2.2, 0.7, 0] },
     ],
   },
-  space: {
-    title: '🚀 Space',
-    items: [
-      { word: 'sun', color: '#ff9500', shape: 'sphere', pos: [-2.2, 0.7, 0] },
-      { word: 'moon', color: '#e5e5ea', shape: 'dodecahedron', pos: [0, 0.7, 1.2] },
-      { word: 'star', color: '#ffd60a', shape: 'octahedron', pos: [2.2, 0.7, 0] },
-    ],
-  },
 };
 
 const useTutorStore = create(
@@ -81,29 +72,18 @@ const useTutorStore = create(
       isSpeaking: false,
       isListening: false,
       celebrate: false,
-
       setCategory: (cat) => {
         playSFX('click');
-        set({
-          currentCategory: cat,
-          targetWord: null,
-          tutorMessage: `Topic: ${LESSONS[cat].title}. Press Start!`,
-        });
+        set({ currentCategory: cat, targetWord: null, tutorMessage: `Topic: ${LESSONS[cat].title}. Press Start!` });
       },
       setSpeaking: (val) => set({ isSpeaking: val }),
       setListening: (val) => set({ isListening: val }),
       setTutorMessage: (msg) => set({ tutorMessage: msg }),
-
       triggerSuccess: (customReply) => {
         playSFX('success');
-        set((state) => ({
-          stars: state.stars + 1,
-          celebrate: true,
-          tutorMessage: customReply,
-        }));
+        set((state) => ({ stars: state.stars + 1, celebrate: true, tutorMessage: customReply }));
         setTimeout(() => set({ celebrate: false }), 2200);
       },
-
       startNewRound: () => {
         const { currentCategory } = get();
         const items = LESSONS[currentCategory].items;
@@ -113,46 +93,31 @@ const useTutorStore = create(
         return prompt;
       },
     }),
-    {
-      name: 'kids-english-tutor-storage',
-      partialize: (state) => ({ stars: state.stars }),
-    }
+    { name: 'kids-english-tutor-storage', partialize: (state) => ({ stars: state.stars }) }
   )
 );
 
 const speak = (text, onEnd) => {
-  if (!window.speechSynthesis) {
-    if (onEnd) onEnd();
-    return;
-  }
+  if (!window.speechSynthesis) { if (onEnd) onEnd(); return; }
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-US';
   utterance.rate = 0.9;
   utterance.pitch = 1.25;
-
   utterance.onstart = () => useTutorStore.getState().setSpeaking(true);
-  utterance.onend = () => {
-    useTutorStore.getState().setSpeaking(false);
-    if (onEnd) onEnd();
-  };
-  utterance.onerror = () => {
-    useTutorStore.getState().setSpeaking(false);
-    if (onEnd) onEnd();
-  };
+  utterance.onend = () => { useTutorStore.getState().setSpeaking(false); if (onEnd) onEnd(); };
+  utterance.onerror = () => { useTutorStore.getState().setSpeaking(false); if (onEnd) onEnd(); };
   window.speechSynthesis.speak(utterance);
 };
 
 const handleVoiceEvaluation = (spokenText) => {
   const { targetWord, triggerSuccess, startNewRound, setTutorMessage } = useTutorStore.getState();
-
   if (!targetWord) {
     const msg = 'Press the green Start button first!';
     setTutorMessage(msg);
     speak(msg);
     return;
   }
-
   if (spokenText.toLowerCase().includes(targetWord)) {
     const msg = `Awesome! You said ${targetWord}! You earned a star!`;
     triggerSuccess(msg);
@@ -197,14 +162,6 @@ function TutorRobot() {
           <sphereGeometry args={[0.62, 32, 32]} />
           <meshStandardMaterial color="#FBBF24" roughness={0.3} />
         </mesh>
-        <mesh position={[0, 0.72, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 0.3]} />
-          <meshStandardMaterial color="#64748B" />
-        </mesh>
-        <mesh position={[0, 0.9, 0]}>
-          <sphereGeometry args={[0.1, 16, 16]} />
-          <meshStandardMaterial color={celebrate ? '#10B981' : '#EF4444'} />
-        </mesh>
         <mesh position={[-0.22, 0.14, 0.54]}>
           <sphereGeometry args={[0.09, 16, 16]} />
           <meshStandardMaterial color="#0F172A" />
@@ -232,7 +189,6 @@ function InteractiveItems() {
       speak(`That is ${word}! Press Start Lesson to play.`);
       return;
     }
-
     if (word === targetWord) {
       const msg = `Great job! That is ${word}!`;
       triggerSuccess(msg);
@@ -250,7 +206,6 @@ function InteractiveItems() {
       case 'box': return <boxGeometry args={[0.85, 0.85, 0.85]} />;
       case 'capsule': return <capsuleGeometry args={[0.35, 0.6, 8, 16]} />;
       case 'dodecahedron': return <dodecahedronGeometry args={[0.55, 0]} />;
-      case 'octahedron': return <octahedronGeometry args={[0.6, 0]} />;
       default: return <sphereGeometry args={[0.52, 32, 32]} />;
     }
   };
@@ -291,21 +246,60 @@ export default function App() {
     speak(prompt);
   };
 
+  const handleMic = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    playSFX('click');
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.onstart = () => setListening(true);
+    recognition.onend = () => setListening(false);
+    recognition.onresult = (e) => handleVoiceEvaluation(e.results.transcript);
+    recognition.start();
+  };
 
-pkg update -y && pkg install -y nodejs
-rm -rf english-tutor-3d
-npm create vite@latest english-tutor-3d -- --template react
-cd english-tutor-3d
-npm install three @react-three/fiber @react-three/drei zustand --legacy-peer-deps
+  return (
+    <div style={{ width: '100vw', height: '100vh', background: 'linear-gradient(180deg, #BAE6FD 0%, #F0F9FF 100%)', position: 'relative', overflow: 'hidden', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '16px', zIndex: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px', pointerEvents: 'auto' }}>
+            {Object.entries(LESSONS).map(([key, val]) => (
+              <button key={key} onClick={() => setCategory(key)} style={{ padding: '8px 14px', borderRadius: '18px', border: 'none', fontSize: '14px', fontWeight: '700', background: currentCategory === key ? '#F97316' : '#FFFFFF', color: currentCategory === key ? '#FFFFFF' : '#334155' }}>
+                {val.title}
+              </button>
+            ))}
+          </div>
+          <div style={{ background: '#FACC15', padding: '8px 18px', borderRadius: '20px', fontSize: '18px', fontWeight: '800', color: '#713F12' }}>
+            ⭐ {stars}
+          </div>
+        </div>
 
-cat << 'EOF' > src/index.css
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-html, body, #root {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+        <div style={{ alignSelf: 'center', background: 'rgba(255,255,255,0.95)', padding: '12px 22px', borderRadius: '24px', fontSize: '18px', fontWeight: '700', color: '#1E293B', textAlign: 'center', maxWidth: '90%' }}>
+          🤖 {tutorMessage}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', pointerEvents: 'auto' }}>
+          <button onClick={handleStart} style={{ padding: '14px 26px', fontSize: '17px', borderRadius: '50px', border: 'none', background: '#10B981', color: '#FFF', fontWeight: '800' }}>
+            ▶️ Start / Next
+          </button>
+          {speechSupported && (
+            <button onClick={handleMic} style={{ padding: '14px 26px', fontSize: '17px', borderRadius: '50px', border: 'none', background: isListening ? '#F43F5E' : '#0284C7', color: '#FFF', fontWeight: '800' }}>
+              {isListening ? '🎙️ Listening...' : '🎤 Speak Answer'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <Canvas shadows camera={{ position: [0, 2.4, 6.5], fov: 48 }}>
+        <ambientLight intensity={0.8} />
+        <directionalLight position={[5, 8, 5]} intensity={1.2} castShadow />
+        <Environment preset="park" />
+        <TutorRobot />
+        <InteractiveItems />
+        <ContactShadows position={[0, -0.01, 0]} opacity={0.35} scale={12} blur={2.2} />
+        <OrbitControls enableZoom={false} enablePan={false} minPolarAngle={Math.PI / 4} maxPolarAngle={Math.PI / 2.1} />
+      </Canvas>
+    </div>
+  );
 }
