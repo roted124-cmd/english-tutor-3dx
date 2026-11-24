@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">English Tutor 3D</string>
+    <string name="title_activity_main">English Tutor 3D</string>
+    <string name="package_name">com.englishtutor.kids3d</string>
+    <string name="custom_url_scheme">com.englishtutor.kids3d</string>
+</resources>

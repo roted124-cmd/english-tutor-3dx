@@ -1,0 +1,8 @@
+{
+  "appId": "com.englishtutor.kids3d",
+  "appName": "English Tutor 3D",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
